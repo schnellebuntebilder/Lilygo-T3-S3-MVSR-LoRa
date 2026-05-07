@@ -7,6 +7,13 @@
  */
 #include "RadioLib.h"
 #include "pin_config.h"
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 // uncomment the following only on one
 // of the nodes to initiate the pings
@@ -39,6 +46,22 @@ bool Lora_Mode = 1;
 
 volatile bool Lora_Receive_Flag = false;
 
+// ── Display helper ───────────────────────────────────────────────
+// Print up to 4 lines on the OLED. Pass nullptr to skip a line.
+void displayPrint(const char *l1, const char *l2 = nullptr,
+                  const char *l3 = nullptr, const char *l4 = nullptr)
+{
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    if (l1) { display.println(l1); }
+    if (l2) { display.println(l2); }
+    if (l3) { display.println(l3); }
+    if (l4) { display.println(l4); }
+    display.display();
+}
+
 void Lora_Receive_Flag_Callback(void)
 {
     Lora_Receive_Flag = true;
@@ -48,6 +71,12 @@ void setup()
 {
     Serial.begin(115200);
 
+    Wire.begin(SCREEN_SDA, SCREEN_SCL);
+    if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+        Serial.println("SSD1306 init failed");
+    }
+    displayPrint("SX127x PingPong2", "Initializing...");
+
     // initialize SX1276 with default settings
     Serial.println("[SX1276] Initializing ... ");
     SPI.begin(LORA_SCLK, LORA_MISO, LORA_MOSI);
@@ -55,11 +84,15 @@ void setup()
     if (state == RADIOLIB_ERR_NONE)
     {
         Serial.println("success!");
+        displayPrint("SX127x PingPong2", "LoRa OK", "Mode: LISTEN");
     }
     else
     {
         Serial.print("failed, code ");
         Serial.println(state);
+        char buf[32];
+        snprintf(buf, sizeof(buf), "Error code: %d", state);
+        displayPrint("SX127x PingPong2", "LoRa FAILED", buf);
         while (true)
             ;
     }
@@ -104,6 +137,11 @@ void loop()
         if (Lora_Mode == 1)
         {
             radio.startReceive();
+            displayPrint("Mode: LISTEN", "Waiting...");
+        }
+        else
+        {
+            displayPrint("Mode: SEND", "Transmitting...");
         }
     }
 
@@ -120,6 +158,10 @@ void loop()
             Send_Package[15] = (uint8_t)Send_Data;
 
             radio.transmit(Send_Package, 16);
+
+            char buf[32];
+            snprintf(buf, sizeof(buf), "TX count: %lu", Send_Data);
+            displayPrint("Mode: SEND", "Packet sent!", buf);
 
             CycleTime = millis() + 100;
         }
@@ -192,6 +234,12 @@ void loop()
                         Serial.print("[SX1276] SNR:\t\t");
                         Serial.print(radio.getSNR());
                         Serial.println(" dB");
+
+                        char dBuf[22], snrBuf[22], dataBuf[22];
+                        snprintf(dBuf,    sizeof(dBuf),    "RSSI: %.1f dBm", radio.getRSSI());
+                        snprintf(snrBuf,  sizeof(snrBuf),  "SNR:  %.1f dB",  radio.getSNR());
+                        snprintf(dataBuf, sizeof(dataBuf), "Data: %lu", Receive_Data);
+                        displayPrint("Mode: LISTEN", "Pkt received!", dBuf, snrBuf);
 
                         Send_Data = Receive_Data + 1;
 

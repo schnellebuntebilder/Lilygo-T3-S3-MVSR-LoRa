@@ -16,8 +16,11 @@
 #define IIS_SAMPLE_RATE 8000 // sample rate
 #define IIS_DATA_BIT 16      // data bit width
 
-#define LORA_TRANSMISSION_HEAD_SIZE 12
+#define LORA_TRANSMISSION_HEAD_SIZE 16  // 4 magic + 8 MAC + 4 channel key
 #define LORA_TRANSMISSION_DATA_SIZE 200
+
+// Change these 4 bytes on both devices to create a private channel
+static const uint8_t CHANNEL_KEY[4] = {0x57, 0xAB, 0x4B, 0x49};
 
 const uint64_t Local_MAC = ESP.getEfuseMac();
 
@@ -41,6 +44,10 @@ uint8_t Send_Package[LORA_TRANSMISSION_HEAD_SIZE + LORA_TRANSMISSION_DATA_SIZE] 
     (uint8_t)(Local_MAC >> 16),
     (uint8_t)(Local_MAC >> 8),
     (uint8_t)Local_MAC,
+    CHANNEL_KEY[0],
+    CHANNEL_KEY[1],
+    CHANNEL_KEY[2],
+    CHANNEL_KEY[3],
 };
 
 uint8_t Receive_Package[LORA_TRANSMISSION_HEAD_SIZE + LORA_TRANSMISSION_DATA_SIZE];
@@ -457,7 +464,8 @@ void loop()
             if ((Receive_Package[0] == 'M') &&
                 (Receive_Package[1] == 'A') &&
                 (Receive_Package[2] == 'C') &&
-                (Receive_Package[3] == ':'))
+                (Receive_Package[3] == ':') &&
+                (memcmp(&Receive_Package[12], CHANNEL_KEY, 4) == 0)) // channel key must match
             {
                 uint64_t temp_mac = 0;
                 for (size_t i = 0; i < 8; ++i)
@@ -476,12 +484,16 @@ void loop()
                     Serial.print("[SX1276] SNR:\t\t");
                     Serial.print(radio.getSNR());
                     Serial.println(" dB");
-                }
 
-                const auto current_buf_size = Lora_Receive_Data_Stream.size();
-                Lora_Receive_Data_Stream.resize(current_buf_size + LORA_TRANSMISSION_DATA_SIZE);
-                memcpy(Lora_Receive_Data_Stream.data() + current_buf_size,
-                       &Receive_Package[LORA_TRANSMISSION_HEAD_SIZE], LORA_TRANSMISSION_DATA_SIZE);
+                    const auto current_buf_size = Lora_Receive_Data_Stream.size();
+                    Lora_Receive_Data_Stream.resize(current_buf_size + LORA_TRANSMISSION_DATA_SIZE);
+                    memcpy(Lora_Receive_Data_Stream.data() + current_buf_size,
+                           &Receive_Package[LORA_TRANSMISSION_HEAD_SIZE], LORA_TRANSMISSION_DATA_SIZE);
+                }
+            }
+            else if (Receive_Package[0] == 'M')
+            {
+                Serial.println("[SX1276] Packet ignored: wrong channel key");
             }
         }
 

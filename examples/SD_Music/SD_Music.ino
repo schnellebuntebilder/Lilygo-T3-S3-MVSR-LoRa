@@ -62,8 +62,8 @@ void setup()
     delay(100);
 
     audio.setPinout(MAX98357A_BCLK, MAX98357A_LRCLK, MAX98357A_DATA);
-    audio.setVolume(3); // 0...21,Volume setting
-    // audio.setBalance(-16);
+    audio.setVolume(21); // 0...21,Volume setting
+    //audio.setBalance(-16);
 
     audio.connecttoSD(SD_FILE_NAME);
 
