@@ -40,15 +40,15 @@ void setup()
     }
     Serial.println("PCF85063 initialization successfully");
 
-    // 设置时间格式为24小时制
+    // Set time format to 24-hour mode
     PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_TIME_FORMAT,
                                      PCF85063->Arduino_IIC_RTC::Device_Mode::RTC_CLOCK_TIME_FORMAT_24);
 
-    // 关闭时钟输出
+    // Disable clock output
     PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_OUTPUT_VALUE,
                                      PCF85063->Arduino_IIC_RTC::Device_Mode::RTC_CLOCK_OUTPUT_OFF);
 
-    // 开启RTC
+    // Enable RTC
     PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_RTC,
                                      PCF85063->Arduino_IIC_RTC::Device_State::RTC_DEVICE_ON);
 
@@ -92,7 +92,7 @@ void loop()
         switch (temp_count)
         {
         case 0:
-            // 关闭时钟输出
+            // Disable clock output
             PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_OUTPUT_VALUE,
                                              PCF85063->Arduino_IIC_RTC::Device_Mode::RTC_CLOCK_OUTPUT_OFF);
             break;
@@ -134,28 +134,28 @@ void loop()
             temp_count = -1;
         }
 
-        // 关闭RTC
+        // Disable RTC
         PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_RTC,
                                          PCF85063->Arduino_IIC_RTC::Device_State::RTC_DEVICE_OFF);
-        // 时钟传感器设置秒
+        // Set seconds
         PCF85063->IIC_Write_Device_Value(PCF85063->Arduino_IIC_RTC::Device_Value::RTC_SET_SECOND_DATA,
-                                         58);
-        // 时钟传感器设置分
+                                         0);
+        // Set minutes
         PCF85063->IIC_Write_Device_Value(PCF85063->Arduino_IIC_RTC::Device_Value::RTC_SET_MINUTE_DATA,
-                                         59);
-        // 时钟传感器设置时
+                                         46);
+        // Set hours
         PCF85063->IIC_Write_Device_Value(PCF85063->Arduino_IIC_RTC::Device_Value::RTC_SET_HOUR_DATA,
-                                         23);
-        // 时钟传感器设置天
-        PCF85063->IIC_Write_Device_Value(PCF85063->Arduino_IIC_RTC::Device_Value::RTC_SET_DAY_DATA,
-                                         31);
-        // 时钟传感器设置月
-        PCF85063->IIC_Write_Device_Value(PCF85063->Arduino_IIC_RTC::Device_Value::RTC_SET_MONTH_DATA,
                                          12);
-        // 时钟传感器设置年
+        // Set day
+        PCF85063->IIC_Write_Device_Value(PCF85063->Arduino_IIC_RTC::Device_Value::RTC_SET_DAY_DATA,
+                                         7);
+        // Set month
+        PCF85063->IIC_Write_Device_Value(PCF85063->Arduino_IIC_RTC::Device_Value::RTC_SET_MONTH_DATA,
+                                         5);
+        // Set year
         PCF85063->IIC_Write_Device_Value(PCF85063->Arduino_IIC_RTC::Device_Value::RTC_SET_YEAR_DATA,
-                                         99);
-        // 开启RTC
+                                         26);
+        // Enable RTC
         PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_RTC,
                                          PCF85063->Arduino_IIC_RTC::Device_State::RTC_DEVICE_ON);
     }

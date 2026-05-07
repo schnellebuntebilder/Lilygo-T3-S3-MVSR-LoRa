@@ -80,3 +80,40 @@ Verbindet den ESP32-S3 mit einem WLAN und streamt Audio von einer URL über den 
 
 ### sx126x_tx_continuous_wave
 Sendet mit dem SX1262 ein kontinuierliches Trägersignal (Continuous Wave) auf 868 MHz. Nützlich für HF-Messungen, Antennentests und die Überprüfung der Ausgangsleistung.
+
+---
+
+## Debug-Beispiele (`debug/examples`)
+
+### Chip_Scan
+Liest die einzigartige 6-Byte-Chip-ID (eFuse MAC) des ESP32 aus und gibt sie formatiert auf dem seriellen Monitor aus. Hilfreich zur schnellen Geräteidentifikation.
+
+### Codec2_Test
+Testet den Codec2-Algorithmus isoliert: Enkodiert einen synthetischen 1-kHz-Sinus-Testton und dekodiert ihn wieder, um die korrekte Funktion der Sprachkomprimierungsbibliothek zu verifizieren.
+
+### Lora_Receive_Interrupt
+Empfängt LoRa-Pakete interruptgesteuert mit RadioLib. Sobald ein vollständiges Paket eintrifft, wird ein DIO-Interrupt ausgelöst und der Paketinhalt seriell ausgegeben.
+
+### Lora_Transmit_Interrupt
+Sendet LoRa-Pakete interruptgesteuert: Ein Paket mit der MAC-Adresse des Absenders wird übertragen; nach Abschluss signalisiert ein Interrupt, dass das nächste Paket gesendet werden kann.
+
+### SX1262_Send_Contract
+Einfaches SX1262-Sendebeispiel ohne Interrupt: Sendet zyklisch ein festes Datenpaket und protokolliert Erfolg oder Fehlercode auf dem seriellen Monitor. Geeignet als Kommunikations-Grundgerüst.
+
+### SX126x_Channel_Activity_Detection_Blocking
+Führt eine blockierende Kanalaktivitätserkennung (CAD) mit dem SX1262 durch: Das Programm wartet synchron auf das CAD-Ergebnis, bevor es fortfährt. Nicht für zeitkritische Anwendungen empfohlen.
+
+### SX126x_Channel_Activity_Detection_Interrupt
+Erkennt laufende LoRa-Übertragungen auf dem aktuellen Kanal per Interrupt-gesteuerter CAD. Effizienter als die blockierende Variante, da der Prozessor zwischenzeitlich andere Aufgaben erledigen kann.
+
+### SX126x_FSK_Modem
+Zeigt die Konfiguration und Nutzung des FSK-Modems im SX1262. Dient als Vorlage zum Umstellen anderer Beispiele auf FSK-Betrieb anstelle von LoRa.
+
+### SX126x_Spectrum_Scan
+Führt einen Spektrum-Leistungsscan mit dem SX1262 durch und gibt 33 Leistungs-Bins pro Zeile seriell aus. Die Ergebnisse lassen sich mit dem mitgelieferten Python-Skript visualisieren. (Experimentell – erfordert einen binären Patch auf dem SX126x.)
+
+### SX126x_Spectrum_Scan_Frequency
+Erweiterung des Spektrum-Scans mit automatischem Frequenz-Sweep über einen definierten Bereich. Gibt pro Frequenzschritt eine Scan-Zeile aus, die anschließend grafisch ausgewertet werden kann. (Experimentell.)
+
+### i2s_loopback
+I²S-Loopback-Test auf niedriger Ebene (ESP-IDF `driver/i2s.h`): Mikrofondaten werden direkt mit 8 kHz aufgenommen und über den Lautsprecher (MAX98357A) wiedergegeben – ohne höherstufige Abstraktionsschichten.
