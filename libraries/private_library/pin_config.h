@@ -15,11 +15,11 @@
 
 /////////////////////////////////////////////////////////////////////////
 // #define T3_S3_SX1262
-// #define T3_S3_SX1276
+#define T3_S3_SX1276
 // #define T3_S3_SX1278
 // #define T3_S3_SX1280
 // #define T3_S3_SX1280PA
-#define T3_S3_LR1121
+//#define T3_S3_LR1121
 
 #ifdef T3_S3_SX1262
 #define LORA_DIO1 33
