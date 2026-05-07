@@ -1,7 +1,7 @@
 /**********************************************************************
   Filename    : Camera SD Snapshot
-  Description : Captures grayscale frames, stores JPG and 1-bit BMP on SD,
-                and serves them from a Wi-Fi access point.
+  Description : Captures grayscale frames, stores JPG and dithered 1-bit BMP
+                on SD, and serves them from a Wi-Fi access point.
 **********************************************************************/
 #include <Arduino.h>
 #include "esp_camera.h"
@@ -200,7 +200,7 @@ bool writeJpegFromGray(const char *path, uint8_t *buf, int width, int height) {
   return true;
 }
 
-uint8_t computeAdaptiveThreshold(const uint8_t *buf, int width, int height) {
+uint8_t computeAverageLuminance(const uint8_t *buf, int width, int height) {
   const size_t pixelCount = static_cast<size_t>(width) * static_cast<size_t>(height);
   uint32_t sum = 0;
 
@@ -211,7 +211,56 @@ uint8_t computeAdaptiveThreshold(const uint8_t *buf, int width, int height) {
   return static_cast<uint8_t>(sum / pixelCount);
 }
 
-bool writeBmp1Bit(const char *path, const uint8_t *buf, int width, int height, uint8_t threshold) {
+bool ditherToPackedBitmap(const uint8_t *buf, int width, int height, uint8_t exposureCenter,
+                          uint8_t *packed, int rowStride) {
+  int16_t *currentError = static_cast<int16_t *>(calloc(static_cast<size_t>(width + 2), sizeof(int16_t)));
+  int16_t *nextError = static_cast<int16_t *>(calloc(static_cast<size_t>(width + 2), sizeof(int16_t)));
+  if (!currentError || !nextError) {
+    Serial.println("Not enough memory for dithering buffers");
+    free(currentError);
+    free(nextError);
+    return false;
+  }
+
+  memset(packed, 0, static_cast<size_t>(rowStride) * static_cast<size_t>(height));
+  const int exposureBias = 128 - static_cast<int>(exposureCenter);
+
+  for (int y = 0; y < height; y++) {
+    memset(nextError, 0, static_cast<size_t>(width + 2) * sizeof(int16_t));
+    const size_t rowOffset = static_cast<size_t>(height - 1 - y) * static_cast<size_t>(rowStride);
+
+    for (int x = 0; x < width; x++) {
+      int value = static_cast<int>(buf[y * width + x]) + exposureBias + currentError[x + 1];
+      value = constrain(value, 0, 255);
+
+      const int quantized = (value >= 128) ? 255 : 0;
+      if (quantized != 0) {
+        packed[rowOffset + static_cast<size_t>(x / 8)] |= static_cast<uint8_t>(0x80 >> (x % 8));
+      }
+
+      const int error = value - quantized;
+      const int err7 = (error * 7) / 16;
+      const int err3 = (error * 3) / 16;
+      const int err5 = (error * 5) / 16;
+      const int err1 = error - err7 - err3 - err5;
+
+      currentError[x + 2] = static_cast<int16_t>(currentError[x + 2] + err7);
+      nextError[x] = static_cast<int16_t>(nextError[x] + err3);
+      nextError[x + 1] = static_cast<int16_t>(nextError[x + 1] + err5);
+      nextError[x + 2] = static_cast<int16_t>(nextError[x + 2] + err1);
+    }
+
+    int16_t *temp = currentError;
+    currentError = nextError;
+    nextError = temp;
+  }
+
+  free(currentError);
+  free(nextError);
+  return true;
+}
+
+bool writeBmp1Bit(const char *path, const uint8_t *buf, int width, int height, uint8_t exposureCenter) {
   const int rowBytesPacked = (width + 7) / 8;
   const int rowStride = (rowBytesPacked + 3) & ~3;
   const uint32_t pixelDataSize = static_cast<uint32_t>(rowStride * height);
@@ -264,31 +313,27 @@ bool writeBmp1Bit(const char *path, const uint8_t *buf, int width, int height, u
     return false;
   }
 
-  uint8_t *row = static_cast<uint8_t *>(malloc(static_cast<size_t>(rowStride)));
-  if (!row) {
+  uint8_t *bitmap = static_cast<uint8_t *>(malloc(static_cast<size_t>(pixelDataSize)));
+  if (!bitmap) {
     file.close();
-    Serial.println("Not enough memory for BMP row buffer");
+    Serial.println("Not enough memory for BMP bitmap buffer");
     return false;
   }
 
-  for (int y = height - 1; y >= 0; y--) {
-    memset(row, 0, static_cast<size_t>(rowStride));
-    for (int x = 0; x < width; x++) {
-      const uint8_t gray = buf[y * width + x];
-      if (gray >= threshold) {
-        row[x / 8] |= static_cast<uint8_t>(0x80 >> (x % 8));
-      }
-    }
-
-    if (file.write(row, static_cast<size_t>(rowStride)) != static_cast<size_t>(rowStride)) {
-      free(row);
-      file.close();
-      Serial.printf("Failed while writing BMP data to %s\n", path);
-      return false;
-    }
+  if (!ditherToPackedBitmap(buf, width, height, exposureCenter, bitmap, rowStride)) {
+    free(bitmap);
+    file.close();
+    return false;
   }
 
-  free(row);
+  if (file.write(bitmap, static_cast<size_t>(pixelDataSize)) != static_cast<size_t>(pixelDataSize)) {
+    free(bitmap);
+    file.close();
+    Serial.printf("Failed while writing BMP data to %s\n", path);
+    return false;
+  }
+
+  free(bitmap);
   file.close();
   return true;
 }
@@ -328,9 +373,9 @@ bool saveResizedAndCropped(const camera_fb_t *fb) {
     memcpy(cropped + (y * TARGET_WIDTH), scaled + ((cropStartY + y) * scaledWidth), TARGET_WIDTH);
   }
 
-  const uint8_t threshold = computeAdaptiveThreshold(cropped, TARGET_WIDTH, TARGET_HEIGHT);
-  Serial.printf("BMP threshold: %u\n", threshold);
-  const bool ok = writeBmp1Bit(THUMB_IMAGE_PATH, cropped, TARGET_WIDTH, TARGET_HEIGHT, threshold);
+  const uint8_t averageLuminance = computeAverageLuminance(cropped, TARGET_WIDTH, TARGET_HEIGHT);
+  Serial.printf("BMP dithering center: %u\n", averageLuminance);
+  const bool ok = writeBmp1Bit(THUMB_IMAGE_PATH, cropped, TARGET_WIDTH, TARGET_HEIGHT, averageLuminance);
   free(scaled);
   free(cropped);
   return ok;
