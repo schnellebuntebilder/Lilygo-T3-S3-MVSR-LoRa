@@ -6,6 +6,7 @@
  * Packet format BMP : ['I', pkt_idx, total_pkts, data_len, <data>]
  * Packet format JPEG: ['J', pkt_idx, total_pkts, data_len, <data>]
  */
+#include <Arduino.h>
 #include <RadioLib.h>
 #include "pin_config.h"
 #include <Wire.h>
@@ -142,7 +143,7 @@ bool fetchFromCamera()
     unsigned long t0 = millis();
     while (WiFi.status() != WL_CONNECTED) {
         if (millis() - t0 > WIFI_TIMEOUT_MS) {
-            WiFi.disconnect(true);
+            WiFi.mode(WIFI_OFF);
             displayPrint("WiFi timeout"); return false;
         }
         delay(100);
@@ -152,13 +153,12 @@ bool fetchFromCamera()
     // Temporary buffer for raw BMP file (header + pixels)
     static uint8_t bmpRaw[1200];  // 14B header + 40B DIB + 1024B pixels
     uint32_t bmpRawLen = httpFetch(CAM_URL_BMP, bmpRaw, sizeof(bmpRaw));
-    if (bmpRawLen == 0) { WiFi.disconnect(true); return false; }
+    if (bmpRawLen == 0) { WiFi.mode(WIFI_OFF); return false; }
 
     displayPrint("WiFi OK", "Fetching JPG...");
     jpegSize = httpFetch(CAM_URL_JPG, jpegBuf, JPEG_MAX_SIZE);
-    if (jpegSize == 0) { WiFi.disconnect(true); return false; }
+    if (jpegSize == 0) { WiFi.mode(WIFI_OFF); return false; }
 
-    WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
 
     if (!parseBmp(bmpRaw, (int)bmpRawLen, bitmapBuf)) return false;
@@ -227,7 +227,7 @@ void setup()
 {
     pinMode(0, INPUT_PULLUP);
 
-    Wire.begin(SCREEN_SDA, SCREEN_SCL);
+    Wire.setPins(SCREEN_SDA, SCREEN_SCL);  // configure pins; display.begin() starts the bus
     display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
 
     // Init LoRa
