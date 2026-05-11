@@ -49,15 +49,22 @@ static bool     jpegReady    = false;
 
 // TX state machine
 enum TxPhase : int8_t { PHASE_IDLE = -1, PHASE_BMP = 0, PHASE_JPEG = 1 };
-volatile bool transmittedFlag = false;
-static TxPhase txPhase  = PHASE_IDLE;
-static int     txPacket = 0;
-static uint8_t txBuf[PKT_HEADER + PKT_DATA_SIZE];
+enum TxState  : uint8_t { STATE_IDLE, STATE_TX_WAIT, STATE_ACK_WAIT };
+volatile bool radioFlag = false;
+static TxPhase       txPhase    = PHASE_IDLE;
+static TxState       txState    = STATE_IDLE;
+static int           txPacket   = 0;
+static int           retryCount = 0;
+static unsigned long ackDeadline = 0;
+static uint8_t       txBuf[PKT_HEADER + PKT_DATA_SIZE];
+
+#define ACK_TIMEOUT_MS 3000
+#define MAX_RETRIES    5
 
 #if defined(ESP32)
 ICACHE_RAM_ATTR
 #endif
-void setFlag(void) { transmittedFlag = true; }
+void setFlag(void) { radioFlag = true; }
 
 // ── Display helper ──────────────────────────────────────────────────
 void displayPrint(const char *l1, const char *l2 = nullptr,
@@ -198,6 +205,24 @@ void sendPacket(TxPhase phase, int idx)
     txPacket = idx;
 }
 
+// ── Retry current packet or abort after MAX_RETRIES ────────────────
+void retryAndSend()
+{
+    if (++retryCount > MAX_RETRIES) {
+        txPhase    = PHASE_IDLE;
+        txState    = STATE_IDLE;
+        retryCount = 0;
+        displayPrint("Send data", "ACK timeout!", "Press BOOT to retry");
+        radio.startReceive();
+    } else {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "Retry %d/%d", retryCount, MAX_RETRIES);
+        displayPrint("Send data", buf);
+        sendPacket(txPhase, txPacket);
+        txState = STATE_TX_WAIT;
+    }
+}
+
 void setup()
 {
     pinMode(0, INPUT_PULLUP);
@@ -230,7 +255,7 @@ void setup()
 void loop()
 {
     // BOOT button: fetch images from camera, then start TX
-    if (digitalRead(0) == LOW && txPhase == PHASE_IDLE) {
+    if (digitalRead(0) == LOW && txState == STATE_IDLE) {
         delay(200);
         bitmapReady = false;
         jpegReady   = false;
@@ -242,32 +267,67 @@ void loop()
             displayPrint("Send data", "BMP+JPG OK", "Starting TX...");
             delay(500);
             sendPacket(PHASE_BMP, 0);
+            txState = STATE_TX_WAIT;
         } else {
             displayPrint("Send data", "Fetch FAILED", "Press BOOT to retry");
             radio.startReceive();  // keep LoRa awake
         }
     }
 
-    // TX-done interrupt: advance to next packet or finish
-    if (transmittedFlag) {
-        transmittedFlag = false;
-        radio.finishTransmit();
+    // Radio interrupt: TX done or ACK received
+    if (radioFlag) {
+        radioFlag = false;
 
-        int next = txPacket + 1;
-        if (txPhase == PHASE_BMP) {
-            if (next < PKT_TOTAL) {
-                sendPacket(PHASE_BMP, next);
+        if (txState == STATE_TX_WAIT) {
+            // TX done – switch to RX to wait for ACK
+            radio.finishTransmit();
+            ackDeadline = millis() + ACK_TIMEOUT_MS;
+            txState = STATE_ACK_WAIT;
+            radio.startReceive();
+
+        } else if (txState == STATE_ACK_WAIT) {
+            // ACK received
+            uint8_t ackBuf[8];
+            int st = radio.readData(ackBuf, sizeof(ackBuf));
+            if (st == RADIOLIB_ERR_NONE && ackBuf[0] == 'A') {
+                uint8_t ackIdx  = ackBuf[1];
+                uint8_t ackType = ackBuf[2];
+                bool valid = (txPhase == PHASE_BMP  && ackType == 'I' && ackIdx == (uint8_t)txPacket) ||
+                             (txPhase == PHASE_JPEG && ackType == 'J' && ackIdx == (uint8_t)txPacket);
+                if (valid) {
+                    retryCount = 0;
+                    int next = txPacket + 1;
+                    if (txPhase == PHASE_BMP) {
+                        if (next < PKT_TOTAL) {
+                            sendPacket(PHASE_BMP, next);
+                        } else {
+                            // BMP done, continue with JPEG
+                            sendPacket(PHASE_JPEG, 0);
+                        }
+                    } else {  // PHASE_JPEG
+                        if (next < jpegPktTotal) {
+                            sendPacket(PHASE_JPEG, next);
+                        } else {
+                            // All done
+                            txPhase = PHASE_IDLE;
+                            txState = STATE_IDLE;
+                            displayPrint("Done!", "BMP+JPG sent", "Press BOOT again");
+                            radio.startReceive();
+                            return;
+                        }
+                    }
+                    txState = STATE_TX_WAIT;
+                } else {
+                    retryAndSend();  // wrong ACK
+                }
             } else {
-                // BMP done, continue with JPEG
-                sendPacket(PHASE_JPEG, 0);
-            }
-        } else {  // PHASE_JPEG
-            if (next < jpegPktTotal) {
-                sendPacket(PHASE_JPEG, next);
-            } else {
-                txPhase = PHASE_IDLE;
-                displayPrint("Done!", "BMP+JPG sent", "Press BOOT again");
+                retryAndSend();  // bad read or not an ACK packet
             }
         }
+    }
+
+    // ACK timeout
+    if (txState == STATE_ACK_WAIT && (long)(millis() - ackDeadline) >= 0) {
+        retryAndSend();
     }
 }

@@ -179,6 +179,11 @@ void loop()
             bmpPktTotal = 0;
         }
 
+        // ACK – sender waits for this before sending the next packet
+        { uint8_t ack[3] = { 'A', idx, 'I' }; radio.transmit(ack, 3); }
+        radio.startReceive();
+        return;
+
     // ── JPEG packet ('J') ─────────────────────────────────────────
     } else if (type == 'J') {
         if (idx >= PKT_TOTAL_MAX || dataLen > PKT_DATA_SIZE) {
@@ -206,13 +211,16 @@ void loop()
             snprintf(line, sizeof(line), "JPG %d/%d RSSI:%.0f", idx+1, total, radio.getRSSI());
             displayPrint("Receive data", line);
         }
+        // ACK – sender waits for this before sending the next packet
+        { uint8_t ack[3] = { 'A', idx, 'J' }; radio.transmit(ack, 3); }
+
         if (jpegPktCount == jpegPktTotal) {
             Serial.println("[JPG] Complete – saving to SD");
             uint32_t jpegSize = (uint32_t)(jpegPktTotal - 1) * PKT_DATA_SIZE
                               + (uint32_t)jpegLastPktLen;
             jpegPktTotal = 0;
             // LoRa SPI muss freigegeben werden, bevor SD die gemeinsame SPI nutzt
-            radio.standby();
+            // (radio is already in standby after transmit)
             SPI.end();
             saveJpeg(jpegSize);
             showBitmap();
@@ -221,6 +229,8 @@ void loop()
             radio.startReceive();
             return;
         }
+        radio.startReceive();
+        return;
 
     } else {
         Serial.printf("[RX] Unknown type 0x%02X, ignoring\n", type);
