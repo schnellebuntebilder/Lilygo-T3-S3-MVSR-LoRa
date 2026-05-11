@@ -24,7 +24,7 @@ SX1276 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1, SPI);
 #endif
 
 // ── WiFi / camera credentials ─────────────────────────────────────
-#define WIFI_SSID   "ESPCAM"
+#define WIFI_SSID   "ESPS3CAM"
 #define WIFI_PASS   "nullbisneun"
 #define CAM_URL_BMP "http://192.168.4.1/capture.bmp"
 #define CAM_URL_JPG "http://192.168.4.1/capture.jpg"

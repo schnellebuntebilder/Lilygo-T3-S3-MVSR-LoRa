@@ -8,7 +8,8 @@
 #include "img_converters.h"
 #include <WiFi.h>
 #include <WebServer.h>
-#include "camera_pins.h"
+#include "../board_config.h"
+#include "../camera_pins.h"
 #include "FS.h"
 #include "SD_MMC.h"
 #include <stdlib.h>
@@ -20,8 +21,8 @@ constexpr int SD_MMC_CLK = 39;
 constexpr int SD_MMC_D0 = 40;
 constexpr char AP_SSID[] = "ESPCAM";
 constexpr char AP_PASSWORD[] = "nullbisneun";
-constexpr char FULL_IMAGE_PATH[] = "/capture.jpg";
-constexpr char THUMB_IMAGE_PATH[] = "/capture.bmp";
+constexpr char FULL_IMAGE_PATH[] = "../capture.jpg";
+constexpr char THUMB_IMAGE_PATH[] = "../capture.bmp";
 constexpr int TARGET_WIDTH = 128;
 constexpr int TARGET_HEIGHT = 64;
 constexpr unsigned long CAPTURE_INTERVAL_MS = 1000;
